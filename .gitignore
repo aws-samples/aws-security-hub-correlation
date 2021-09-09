@@ -1,0 +1,7 @@
+# CDK asset staging directory
+node_modules
+package-lock.json
+cdk.out
+*.npmignore
+*.DS_Store
+yarn.lock
