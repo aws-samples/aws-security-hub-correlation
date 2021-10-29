@@ -1,0 +1,592 @@
+Resources:
+  DynamoDBencryptionKey27A5FB8A:
+    Type: AWS::KMS::Key
+    Properties:
+      KeyPolicy:
+        Statement:
+          - Action: kms:*
+            Effect: Allow
+            Principal:
+              AWS:
+                Fn::Join:
+                  - ""
+                  - - "arn:"
+                    - Ref: AWS::Partition
+                    - ":iam::"
+                    - Ref: AWS::AccountId
+                    - :root
+            Resource: "*"
+        Version: "2012-10-17"
+      EnableKeyRotation: true
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/DynamoDBencryptionKey/Resource
+  items07D08F4B:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      KeySchema:
+        - AttributeName: Id
+          KeyType: HASH
+        - AttributeName: ResourceId
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: Id
+          AttributeType: S
+        - AttributeName: ResourceId
+          AttributeType: S
+        - AttributeName: Types
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: ddb_sh_index
+          KeySchema:
+            - AttributeName: ResourceId
+              KeyType: HASH
+            - AttributeName: Types
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        KMSMasterKeyId:
+          Fn::GetAtt:
+            - DynamoDBencryptionKey27A5FB8A
+            - Arn
+        SSEEnabled: true
+        SSEType: KMS
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TableName: security-hub-correlation-table
+      TimeToLiveSpecification:
+        AttributeName: ExpDate
+        Enabled: true
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/items/Resource
+  lambdaCreateSHFindingRoleBA5AD6CE:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      RoleName: CustomSHFindingAutomationRole
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/lambdaCreateSHFindingRole/Resource
+  lambdaCreateSHFindingRoleDefaultPolicy28BB0FB0:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:Query
+              - dynamodb:GetItem
+              - dynamodb:Scan
+              - dynamodb:ConditionCheckItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+            Effect: Allow
+            Resource:
+              - Fn::GetAtt:
+                  - items07D08F4B
+                  - Arn
+              - Fn::Join:
+                  - ""
+                  - - Fn::GetAtt:
+                        - items07D08F4B
+                        - Arn
+                    - /index/*
+          - Action:
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - DynamoDBencryptionKey27A5FB8A
+                - Arn
+          - Action: dynamodb:ListStreams
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - items07D08F4B
+                - StreamArn
+        Version: "2012-10-17"
+      PolicyName: lambdaCreateSHFindingRoleDefaultPolicy28BB0FB0
+      Roles:
+        - Ref: lambdaCreateSHFindingRoleBA5AD6CE
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/lambdaCreateSHFindingRole/DefaultPolicy/Resource
+  CreateCustomSHFindingFunction8D4917BE:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bS3Bucket99A342FB
+        S3Key:
+          Fn::Join:
+            - ""
+            - - Fn::Select:
+                  - 0
+                  - Fn::Split:
+                      - "||"
+                      - Ref: AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bS3VersionKeyEBA0FBB3
+              - Fn::Select:
+                  - 1
+                  - Fn::Split:
+                      - "||"
+                      - Ref: AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bS3VersionKeyEBA0FBB3
+      Role:
+        Fn::GetAtt:
+          - lambdaCreateSHFindingRoleBA5AD6CE
+          - Arn
+      Description: Create AWS Security Hub finding from DynamoDB match.
+      Environment:
+        Variables:
+          DYNAMODB_TABLE:
+            Ref: items07D08F4B
+          DYNAMODB_GSI: ddb_sh_index
+      Handler: create_sh_finding.lambda_handler
+      ReservedConcurrentExecutions: 100
+      Runtime: python3.8
+      Timeout: 300
+    DependsOn:
+      - lambdaCreateSHFindingRoleDefaultPolicy28BB0FB0
+      - lambdaCreateSHFindingRoleBA5AD6CE
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/CreateCustomSHFindingFunction/Resource
+      aws:asset:path: asset.edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b
+      aws:asset:property: Code
+  CreateCustomSHFindingFunctionDynamoDBEventSourceSecurityhubCorrelationBlogStackitemsC2F9821CC113D4E3:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName:
+        Ref: CreateCustomSHFindingFunction8D4917BE
+      BatchSize: 100
+      EventSourceArn:
+        Fn::GetAtt:
+          - items07D08F4B
+          - StreamArn
+      StartingPosition: LATEST
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/CreateCustomSHFindingFunction/DynamoDBEventSource:SecurityhubCorrelationBlogStackitemsC2F9821C/Resource
+  lambdaCreateSHFindingManagedPolicyC2E9F8F8:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action: securityhub:BatchImportFindings
+            Effect: Allow
+            Resource: "*"
+            Sid: CreateSHFinding
+        Version: "2012-10-17"
+      Description: ""
+      ManagedPolicyName: lambdaCreateSHFindingManagedPolicy
+      Path: /
+      Roles:
+        - Ref: lambdaCreateSHFindingRoleBA5AD6CE
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/lambdaCreateSHFindingManagedPolicy/Resource
+  lambdaCreateDDBEntryEAEA388A:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      RoleName: Dynamo_SH_Entry
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/lambdaCreateDDBEntry/Resource
+  CreateDDBSHentry99B584B5:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket:
+          Ref: AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cS3Bucket37E322B2
+        S3Key:
+          Fn::Join:
+            - ""
+            - - Fn::Select:
+                  - 0
+                  - Fn::Split:
+                      - "||"
+                      - Ref: AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cS3VersionKeyABD2FC74
+              - Fn::Select:
+                  - 1
+                  - Fn::Split:
+                      - "||"
+                      - Ref: AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cS3VersionKeyABD2FC74
+      Role:
+        Fn::GetAtt:
+          - lambdaCreateDDBEntryEAEA388A
+          - Arn
+      Description: Create Security Hub Findings entry in DynamoDB.
+      Environment:
+        Variables:
+          DYNAMODB_TABLE:
+            Ref: items07D08F4B
+          DYNAMODB_TTL: "30"
+      Handler: create_ddb_sh_entry.lambda_handler
+      ReservedConcurrentExecutions: 100
+      Runtime: python3.8
+      Timeout: 300
+    DependsOn:
+      - lambdaCreateDDBEntryEAEA388A
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/CreateDDBSHentry/Resource
+      aws:asset:path: asset.9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c
+      aws:asset:property: Code
+  lambdaCreateDDBEntryManagedPolicy5D32F544:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Action:
+              - dynamodb:BatchGetItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:ConditionCheckItem
+              - dynamodb:PutItem
+              - dynamodb:DescribeTable
+              - dynamodb:DeleteItem
+              - dynamodb:GetItem
+              - dynamodb:Scan
+              - dynamodb:Query
+              - dynamodb:UpdateItem
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - items07D08F4B
+                - Arn
+            Sid: DynamoDBTableAccess
+          - Action:
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Effect: Allow
+            Resource:
+              Fn::GetAtt:
+                - DynamoDBencryptionKey27A5FB8A
+                - Arn
+            Sid: DynamoDBKMSKeyUse
+        Version: "2012-10-17"
+      Description: ""
+      ManagedPolicyName: lambdaAddDDBManagedPolicy
+      Path: /
+      Roles:
+        - Ref: lambdaCreateDDBEntryEAEA388A
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/lambdaCreateDDBEntryManagedPolicy/Resource
+  RespondSecurityHubEventGuardDutyFAD4FE04:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Creates a DynamoDB entry for specific GuardDuty Finding being generated.
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - Security Hub Findings - Imported
+        detail:
+          findings:
+            ProductName:
+              - GuardDuty
+            Types:
+              - prefix: TTPs/Exfiltration:S3-
+              - prefix: Unusual Behaviors/VM/Behavior:EC2-NetworkPortUnusual
+              - prefix: TTPs/Command and Control/Backdoor:EC2-
+              - prefix: TTPs/Initial Access/UnauthorizedAccess:EC2-SSHBruteForce
+              - prefix: TTPs/Initial Access/UnauthorizedAccess:EC2-RDPBruteForce
+            Workflow:
+              Status:
+                - NEW
+            RecordState:
+              - ACTIVE
+      Name: Create-Dynamo-Entry-from-Security-Hub-GuardDuty
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - CreateDDBSHentry99B584B5
+              - Arn
+          Id: Target0
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_GuardDuty/Resource
+  RespondSecurityHubEventGuardDutyAllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5D92FD42B:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - CreateDDBSHentry99B584B5
+          - Arn
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - RespondSecurityHubEventGuardDutyFAD4FE04
+          - Arn
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_GuardDuty/AllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5
+  RespondSecurityHubEventSecurityHub83866C70:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Creates a DynamoDB entry for specific Security Hub Finding being generated.
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - Security Hub Findings - Imported
+        detail:
+          findings:
+            ProductName:
+              - Security Hub
+            ProductFields:
+              ControlId:
+                - EC2.18
+                - EC2.9
+            Workflow:
+              Status:
+                - NEW
+            RecordState:
+              - ACTIVE
+      Name: Create-Dynamo-Entry-Security-Hub
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - CreateDDBSHentry99B584B5
+              - Arn
+          Id: Target0
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_SecurityHub/Resource
+  RespondSecurityHubEventSecurityHubAllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C54E1FB9A5:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - CreateDDBSHentry99B584B5
+          - Arn
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - RespondSecurityHubEventSecurityHub83866C70
+          - Arn
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_SecurityHub/AllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5
+  RespondSecurityHubEventMacie4F7999A7:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Creates a DynamoDB entry for specific Macie Finding being generated.
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - Security Hub Findings - Imported
+        detail:
+          findings:
+            ProductName:
+              - Macie
+            Types:
+              - prefix: "Sensitive Data Identifications/PII/SensitiveData:"
+            WorkflowState:
+              - NEW
+            RecordState:
+              - ACTIVE
+      Name: Create-Dynamo-Entry-from-Security-Hub-Macie
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - CreateDDBSHentry99B584B5
+              - Arn
+          Id: Target0
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_Macie/Resource
+  RespondSecurityHubEventMacieAllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5FC8B5F5F:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - CreateDDBSHentry99B584B5
+          - Arn
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - RespondSecurityHubEventMacie4F7999A7
+          - Arn
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_Macie/AllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5
+  RespondSecurityHubEventInspector1360FE1C:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Creates a DynamoDB entry for specific Inspector Finding being generated.
+      EventPattern:
+        source:
+          - aws.securityhub
+        detail-type:
+          - Security Hub Findings - Imported
+        detail:
+          findings:
+            ProductName:
+              - Inspector
+            Severity:
+              Label:
+                - CRITICAL
+            WorkflowState:
+              - NEW
+            RecordState:
+              - ACTIVE
+      Name: Create-Dynamo-Entry-from-Security-Hub-Inspector
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::GetAtt:
+              - CreateDDBSHentry99B584B5
+              - Arn
+          Id: Target0
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_Inspector/Resource
+  RespondSecurityHubEventInspectorAllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5D56F142D:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+          - CreateDDBSHentry99B584B5
+          - Arn
+      Principal: events.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+          - RespondSecurityHubEventInspector1360FE1C
+          - Arn
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/RespondSecurityHubEvent_Inspector/AllowEventRuleSecurityhubCorrelationBlogStackCreateDDBSHentryF8E811C5
+  CDKMetadata:
+    Type: AWS::CDK::Metadata
+    Properties:
+      Analytics: v2:deflate64:H4sIAAAAAAAAE21Q0WoCMRD8lr7nVg/B54q0L0U4zv7AXrIe8S6JZHMWCfn3JlGUQp9mMtldZqaFdr2B9ds7/nAj1bSK0nmCeAwoJ9ETu8VLEjtmClkbtR3F3lkOfpFB7E+2Q4+GAvnyeM5nnqeUDtrZJMrtOBmG+EW38pchCXWzaJwaIH7jMNedSpLQaCD27q5V7NysZV19sANaHEm99D9CEjOaQSHEz8XKYqKMPPnHlWw4VqcHvFxqppP9X+3IG81cc/CmwVIEQ+1DUNnIqfrlYTVjSklYpwjOvLq2W2jb3O6ZtW78YoM2BP0dfwGmwqPregEAAA==
+    Metadata:
+      aws:cdk:path: SecurityhubCorrelationBlogStack/CDKMetadata/Default
+    Condition: CDKMetadataAvailable
+Parameters:
+  AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bS3Bucket99A342FB:
+    Type: String
+    Description: S3 bucket for asset "edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b"
+  AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bS3VersionKeyEBA0FBB3:
+    Type: String
+    Description: S3 key for asset version "edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b" 
+    Default: assets/||edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b.zip
+  AssetParametersedb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925bArtifactHash65E71DC8:
+    Type: String
+    Description: Artifact hash for asset "edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b"
+    Default: edb42bc2a038cd1905856217a8fac350d3298fa99e7c26b5a8d506a5f095925b
+  AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cS3Bucket37E322B2:
+    Type: String
+    Description: S3 bucket for asset "9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c"
+  AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cS3VersionKeyABD2FC74:
+    Type: String
+    Description: S3 key for asset version "9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c"
+    Default: assets/||9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c.zip
+  AssetParameters9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3cArtifactHash83BF9724:
+    Type: String
+    Description: Artifact hash for asset "9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c"
+    Default: 9cb010ddfe9441c4775ad2e6768fb53fad1086b81c0cbfa99d78fcf1f92ecb3c
+Conditions:
+  CDKMetadataAvailable:
+    Fn::Or:
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - af-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-northeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ap-southeast-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - ca-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - cn-northwest-1
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-central-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-north-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-2
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - eu-west-3
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - me-south-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - sa-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-east-2
+      - Fn::Or:
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-1
+          - Fn::Equals:
+              - Ref: AWS::Region
+              - us-west-2
+
