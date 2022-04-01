@@ -32,7 +32,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
       timeToLiveAttribute: 'ExpDate',
       billingMode: BillingMode.PAY_PER_REQUEST,
       pointInTimeRecovery: true,
-      tableName: 'security-hub-correlation-table',
+      tableName: 'security_hub_correlation_table',
       // The default removal policy is RETAIN, which means that cdk destroy will not attempt to delete
       // the new table, and it will remain in your account until manually deleted. By setting the policy to 
       // DESTROY, cdk destroy will delete the table (even if it has data in it)
@@ -63,6 +63,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
     });
 
     const CreateCustomSHFindingFunction = new Function(this, 'CreateCustomSHFindingFunction', {
+      functionName: "Create_Custom_SH_Finding",
       runtime: Runtime.PYTHON_3_8,
       code: Code.fromAsset(join(__dirname, "../lambdas/create_sh_finding/")),
       handler: 'create_sh_finding.lambda_handler',
@@ -112,6 +113,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
     });
     
     const CreateDynamoDBSHEntry = new Function(this, 'CreateDDBSHentry', {
+      functionName: "Create_DDB_SH_Entry",
       runtime: Runtime.PYTHON_3_8,
       code: Code.fromAsset(join(__dirname, "../lambdas/create_ddb_sh_entry/")),
       handler: 'create_ddb_sh_entry.lambda_handler',
@@ -153,7 +155,8 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
           actions: [
             "kms:Encrypt",
             "kms:GenerateDataKey*",
-            "kms:DescribeKey"
+            "kms:DescribeKey",
+            "kms:Decrypt"
           ],
           resources: [
             DynamoDBencryptionKey.keyArn
@@ -210,7 +213,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
           }
         }
       },
-      ruleName: 'Create-Dynamo-Entry-from-Security-Hub-GuardDuty',
+      ruleName: 'Create_Dynamo_Entry_from_Security_Hub_GuardDuty',
       targets: [CreateDynamoDBSHEntry_target]
     }
     );
@@ -251,7 +254,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
           }
         }
       },
-      ruleName: 'Create-Dynamo-Entry-Security-Hub',
+      ruleName: 'Create_Dynamo_Entry_Security_Hub',
       targets: [CreateDynamoDBSHEntry_target]
     }
     );
@@ -283,7 +286,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
           }
         }
       },
-      ruleName: 'Create-Dynamo-Entry-from-Security-Hub-Macie',
+      ruleName: 'Create_Dynamo_Entry_from_Security_Hub_Macie',
       targets: [CreateDynamoDBSHEntry_target]
     }
     );
@@ -315,7 +318,7 @@ export class SecurityhubCorrelationBlogStack extends cdk.Stack {
           }
         }
       },
-      ruleName: 'Create-Dynamo-Entry-from-Security-Hub-Inspector',
+      ruleName: 'Create_Dynamo_Entry_from_Security_Hub_Inspector',
       targets: [CreateDynamoDBSHEntry_target]
     }
     );
