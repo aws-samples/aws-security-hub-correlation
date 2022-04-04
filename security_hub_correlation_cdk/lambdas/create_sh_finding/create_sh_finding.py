@@ -273,7 +273,8 @@ def network_correlation(sh_resource, ddbtable):
         ssh_brute_force_payload = check_ssh_brute_force(sh_resource, ddbtable)
         winrm_brute_forice_payload = check_winrm_brute_force(sh_resource, ddbtable)
         rdp_brute_force_payload = check_rdp_brute_force(sh_resource, ddbtable)
-        if ((check_sh_ec2_public_payload) and network_payload and (ssh_brute_force_payload or rdp_brute_force_payload or winrm_brute_forice_payload)):
+        unrestricted_sg_payload = check_sh_unrestrict_sg(sh_resource, ddbtable)
+        if ((check_sh_ec2_public_payload) and unrestricted_sg_payload and network_payload and (ssh_brute_force_payload or rdp_brute_force_payload or winrm_brute_forice_payload)):
             logger.info('Match found for Security Hub exposed IP or unrestricted SG & GuardDuty Brute force and Unusual Network Port for {}.'.format(sh_resource))
             SH_title = {"SH_Title":'Unusual Network port and Brute force found for possibly exposed EC2 instance {}'.format(sh_resource)}
             SourceUrls = []
@@ -282,6 +283,7 @@ def network_correlation(sh_resource, ddbtable):
             SourceUrlList = {"SourceUrlList": SourceUrls}
             network_payload.update(SourceUrlList)
             network_payload.update(SH_title)
+            create_securityhub_payload(network_payload)
         else:
             logger.info('No matches found for Security Hub exposed IP or SG & GuardDuty Unusual Network and RDS/SSH Brute force for {}.'.format(sh_resource))
     except ClientError as error_handle:
@@ -311,7 +313,8 @@ def backdoor_correlation(sh_resource, ddbtable):
     try:
         logger.info('CHECK #3: GuardDuty EC2 backdoor and Inspector Critical CVEs for {}...'.format(sh_resource))
         gd_backdoor_payload = check_gd_backdoor(sh_resource, ddbtable)
-        inspector_cve_payload = check_inspector_cve(sh_resource, ddbtable)
+        # Inspector's EC2 instance value only contains the instance ID and not the instance ARN. Once Inspector passes the full ARN, remove the [-10:] appended to the sh_resource.
+        inspector_cve_payload = check_inspector_cve(sh_resource[-10:], ddbtable)
         if (gd_backdoor_payload and inspector_cve_payload):
             logger.info('Match found for GuardDuty EC2 backdoor and 3 Inspector Critical CVEs for {}.'.format(sh_resource))
             SH_title = {"SH_Title":'GuardDuty EC2 Backdoor and Critical CVEs found for {}.'.format(sh_resource)}
