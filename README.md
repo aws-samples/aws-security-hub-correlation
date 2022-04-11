@@ -1,6 +1,8 @@
-# Security Hub Correlation CDK Project!
+# Security Hub Correlation
 
-The CDK Typescript project will deploy out the AWS components required to correlate Security Hub Findings from multiple AWS Security Services to generate a new Security Hub Finding to indicate a higher chance of a compromise or breach. 
+The CDK project in the security_hub_correlation_cdk folder will deploy out the AWS components required to correlate Security Hub Findings from multiple AWS Security Services to generate a new Security Hub Finding to indicate a higher chance of a compromise or breach. 
+
+** If you are following the blog and deploying using the CloudFormation template, in the parameters section, you will need to host the lambda source files, located under the lambdas folder in a S3 bucket in your AWS account. 
 
 1. A Security Hub Finding is generated from:
     - Security Hub Operational Foundational Security Best Practices Standard
